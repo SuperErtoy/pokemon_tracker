@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pokémon Card Tracker</title>
+  <link rel="icon" href="data:,">
+  <style>
+    :root { --maxw: 1100px; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background: #0f172a; /* slate-900 */
+      color: #e2e8f0;      /* slate-200 */
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+    header {
+      width: 100%;
+      max-width: var(--maxw);
+      padding: 16px;
+      text-align: center;
+    }
+    header h1 { margin: 8px 0 4px; font-size: clamp(1.2rem, 3vw, 2rem); }
+    header p { margin: 0; color: #94a3b8; font-size: 0.95rem; }
+    .controls {
+      width: 100%;
+      max-width: var(--maxw);
+      display: flex;
+      gap: 8px;
+      padding: 8px 16px 0;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .controls button {
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: none;
+      background: #334155; /* slate-700 */
+      color: #e2e8f0;
+      cursor: pointer;
+    }
+    .controls button:hover { filter: brightness(1.15); }
+    .grid {
+      width: 100%;
+      max-width: var(--maxw);
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 14px;
+      padding: 16px;
+    }
+    .card {
+      background: #111827; /* gray-900 */
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+      transition: transform .08s ease-in-out, box-shadow .2s ease;
+      cursor: pointer;
+      border: 1px solid #1f2937;
+    }
+    .card:active { transform: scale(0.98); }
+    .card img {
+      width: 100%;
+      height: auto;
+      display: block;
+      aspect-ratio: 3 / 4.2;
+      object-fit: contain;
+      background: #0b1220;
+      transition: filter .25s ease;
+    }
+    .card .meta {
+      padding: 8px 10px 12px;
+      display: grid;
+      gap: 2px;
+    }
+    .name { font-weight: 700; font-size: .95rem; }
+    .subtitle { color: #94a3b8; font-size: .82rem; }
+    .grayscale img { filter: grayscale(100%); }
+    footer {
+      margin-top: auto;
+      padding: 16px;
+      color: #64748b;
+      font-size: 0.85rem;
+      text-align: center;
+    }
+    .hint { color: #9ca3af; font-size: .85rem; padding: 0 16px 8px; text-align: center; }
+    .search {
+      padding: 10px 12px; border-radius: 10px; border: 1px solid #334155;
+      background: #0b1220; color: #e2e8f0; min-width: 250px;
+    }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Pokémon Card Tracker</h1>
+    <p>Tap a card to toggle collected (turns grayscale). Your selections are saved on this device.</p>
+  </header>
+
+  <div class="controls">
+    <input id="search" class="search" type="search" placeholder="Search by name, set, number…" />
+    <button id="showAll">Show all</button>
+    <button id="showCollected">Show collected</button>
+    <button id="showUncollected">Show uncollected</button>
+    <button id="reset">Clear all selections</button>
+  </div>
+  <div class="hint">Edit this page to add your own cards: scroll to the bottom of the file and modify the <code>cards</code> array.</div>
+
+  <main id="grid" class="grid"></main>
+
+  <footer>
+    Built for you — works offline once loaded. Add to Home Screen for an app-like experience.
+  </footer>
+
+  <script>
+    // ===== 1) DEFINE YOUR CARDS HERE (add/remove items) =====
+    // tip: replace image URLs with your own card images or the Pokemon TCG static images.
+    const cards = [
+      { id: "swsh12pt5-33", name: "Pikachu V", set: "Crown Zenith", number: "33/159",
+        img: "https://images.pokemontcg.io/swsh12pt5/33.png" },
+      { id: "swsh12pt5-17", name: "Charizard VSTAR", set: "Crown Zenith", number: "17/159",
+        img: "https://images.pokemontcg.io/swsh12pt5/17.png" },
+      { id: "sv4-201", name: "Mewtwo ex", set: "Paradox Rift", number: "201/182",
+        img: "https://images.pokemontcg.io/sv4/201.png" },
+      { id: "sv2-215", name: "Charizard ex", set: "Obsidian Flames", number: "215/197",
+        img: "https://images.pokemontcg.io/sv3/215.png" },
+      { id: "sv1-179", name: "Miraidon ex", set: "Scarlet & Violet", number: "179/198",
+        img: "https://images.pokemontcg.io/sv1/244.png" }
+    ];
+
+    // ===== 2) STATE PERSISTENCE (localStorage) =====
+    const KEY = "ptc-tracker:v1";
+    function loadState() {
+      try { return JSON.parse(localStorage.getItem(KEY)) || {}; }
+      catch { return {}; }
+    }
+    function saveState(state) {
+      localStorage.setItem(KEY, JSON.stringify(state));
+    }
+
+    // ===== 3) RENDER =====
+    const grid = document.getElementById("grid");
+    const state = loadState(); // { [id]: true|false } true = collected
+    function render(list) {
+      grid.innerHTML = "";
+      list.forEach(card => {
+        const wrap = document.createElement("div");
+        wrap.className = "card" + (state[card.id] ? " grayscale" : "");
+        wrap.dataset.id = card.id;
+        wrap.innerHTML = \`
+          <img alt="\${card.name}" loading="lazy" src="\${card.img}"/>
+          <div class="meta">
+            <div class="name">\${card.name}</div>
+            <div class="subtitle">\${card.set} • \${card.number}</div>
+          </div>
+        \`;
+        wrap.addEventListener("click", () => {
+          const id = card.id;
+          const newVal = !state[id];
+          state[id] = newVal;
+          wrap.classList.toggle("grayscale", newVal);
+          saveState(state);
+        });
+        grid.appendChild(wrap);
+      });
+    }
+    render(cards);
+
+    // ===== 4) FILTERS & SEARCH =====
+    const showAllBtn = document.getElementById("showAll");
+    const showCollectedBtn = document.getElementById("showCollected");
+    const showUncollectedBtn = document.getElementById("showUncollected");
+    const search = document.getElementById("search");
+
+    showAllBtn.addEventListener("click", () => render(cards));
+    showCollectedBtn.addEventListener("click", () => render(cards.filter(c => !!state[c.id])));
+    showUncollectedBtn.addEventListener("click", () => render(cards.filter(c => !state[c.id])));
+
+    search.addEventListener("input", (e) => {
+      const q = e.target.value.trim().toLowerCase();
+      if (!q) return render(cards);
+      render(cards.filter(c =>
+        (c.name + " " + c.set + " " + c.number).toLowerCase().includes(q)
+      ));
+    });
+
+    // ===== 5) OFFLINE-FRIENDLY (very basic) =====
+    if ("serviceWorker" in navigator) {
+      // Optional: register a tiny service worker for basic offline caching.
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("./sw.js").catch(() => {});
+      });
+    }
+  </script>
+</body>
+</html>
